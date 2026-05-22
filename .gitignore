@@ -26,6 +26,9 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Local test photos (don't commit)
+station/sample-tray.jpg
 *.egg-info/
 
 # ML model artifacts

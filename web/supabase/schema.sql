@@ -88,6 +88,13 @@ grant select on meals       to anon, authenticated;
 grant select on rewards     to anon, authenticated;
 grant select on redemptions to anon, authenticated;
 
+-- service_role is what the Pi station script uses (full read/write).
+-- Without these grants, even the service key gets "permission denied".
+grant all on students    to service_role;
+grant all on meals       to service_role;
+grant all on rewards     to service_role;
+grant all on redemptions to service_role;
+
 -- Seed data — only inserted on the first run (when each table is empty)
 do $$
 begin
