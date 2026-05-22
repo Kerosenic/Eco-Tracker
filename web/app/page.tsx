@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { supabase } from "@/lib/supabase"
 import {
   LayoutDashboard,
   MonitorPlay,
@@ -77,7 +78,7 @@ const nutritionData = [
   { name: "Fruits", value: 5, color: "oklch(0.85 0.08 155)" },
 ]
 
-const individualLeaderboard = [
+const individualLeaderboardSeed = [
   { rank: 1, name: "Emily Chen", class: "10A", credits: 2450, avatar: "/placeholder.svg?height=40&width=40" },
   { rank: 2, name: "Marcus Wong", class: "11B", credits: 2380, avatar: "/placeholder.svg?height=40&width=40" },
   { rank: 3, name: "Sofia Garcia", class: "9C", credits: 2290, avatar: "/placeholder.svg?height=40&width=40" },
@@ -88,7 +89,7 @@ const individualLeaderboard = [
   { rank: 8, name: "Liam Brown", class: "11C", credits: 1780, avatar: "/placeholder.svg?height=40&width=40" },
 ]
 
-const classLeaderboard = [
+const classLeaderboardSeed = [
   { rank: 1, name: "Class 10A", students: 28, credits: 45600 },
   { rank: 2, name: "Class 11B", students: 26, credits: 42300 },
   { rank: 3, name: "Class 9C", students: 30, credits: 39800 },
@@ -105,7 +106,7 @@ const achievements = [
   { name: "Planet Protector", icon: Leaf, unlocked: false, description: "Save 100kg of CO2" },
 ]
 
-const rewards = [
+const rewardsSeed = [
   { name: "Eco Water Bottle", credits: 500, stock: 15, image: "/placeholder.svg?height=100&width=100" },
   { name: "Eco-Tracker Notebook", credits: 200, stock: 42, image: "/placeholder.svg?height=100&width=100" },
   { name: "Plant Seed Kit", credits: 350, stock: 20, image: "/placeholder.svg?height=100&width=100" },
@@ -116,8 +117,8 @@ const rewards = [
   { name: "School Merch Hoodie", credits: 1500, stock: 8, image: "/placeholder.svg?height=100&width=100" },
 ]
 
-// Current user data
-const currentUser = {
+// Current user data (seed — swapped at runtime by useEffect below)
+const currentUserSeed = {
   name: "Emily Chen",
   class: "10A",
   credits: 2450,
@@ -138,8 +139,8 @@ const schoolStats = {
   newUsersThisWeek: 12,
 }
 
-// Recent meal history data
-const mealHistory = [
+// Recent meal history data (seed — swapped at runtime by useEffect below)
+const mealHistorySeed = [
   { date: "May 20, 2026", waste: "0.15kg", credits: 45, score: "2/12" },
   { date: "May 19, 2026", waste: "0.08kg", credits: 52, score: "1/12" },
   { date: "May 18, 2026", waste: "0.22kg", credits: 38, score: "3/12" },
@@ -177,6 +178,144 @@ export default function EcoTrackerDashboard() {
   const [activeView, setActiveView] = useState("dashboard")
   const [leaderboardType, setLeaderboardType] = useState("individual")
   const [leaderboardPeriod, setLeaderboardPeriod] = useState("all-time")
+  const [individualLeaderboard, setIndividualLeaderboard] = useState(individualLeaderboardSeed)
+  const [classLeaderboard, setClassLeaderboard] = useState(classLeaderboardSeed)
+  const [rewards, setRewards] = useState(rewardsSeed)
+  const [currentUser, setCurrentUser] = useState(currentUserSeed)
+  const [mealHistory, setMealHistory] = useState(mealHistorySeed)
+
+  useEffect(() => {
+    supabase
+      .from("students")
+      .select("name, class, total_credits")
+      .order("total_credits", { ascending: false })
+      .limit(10)
+      .then(({ data, error }) => {
+        if (error) {
+          console.error(
+            "Supabase leaderboard fetch failed:",
+            JSON.stringify(error, null, 2),
+            "\nmessage:", error.message,
+            "\ndetails:", error.details,
+            "\nhint:", error.hint,
+            "\ncode:", error.code,
+          )
+          return
+        }
+        if (!data) return
+        setIndividualLeaderboard(
+          data.map((row, i) => ({
+            rank: i + 1,
+            name: row.name,
+            class: row.class,
+            credits: row.total_credits,
+            avatar: "/placeholder.svg?height=40&width=40",
+          })),
+        )
+
+        const byClass = new Map<string, { students: number; credits: number }>()
+        for (const row of data) {
+          const entry = byClass.get(row.class) ?? { students: 0, credits: 0 }
+          entry.students += 1
+          entry.credits += row.total_credits ?? 0
+          byClass.set(row.class, entry)
+        }
+        const classes = Array.from(byClass.entries())
+          .map(([cls, agg]) => ({ name: `Class ${cls}`, ...agg }))
+          .sort((a, b) => b.credits - a.credits)
+          .map((c, i) => ({ rank: i + 1, ...c }))
+        setClassLeaderboard(classes)
+      })
+  }, [])
+
+  // Rewards catalog
+  useEffect(() => {
+    supabase
+      .from("rewards")
+      .select("name, cost_credits, stock, image_url")
+      .eq("active", true)
+      .order("cost_credits", { ascending: true })
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Supabase rewards fetch failed:", error.message, error.details, error.hint)
+          return
+        }
+        if (!data) return
+        setRewards(
+          data.map((r) => ({
+            name: r.name,
+            credits: r.cost_credits,
+            stock: r.stock,
+            image: r.image_url ?? "/placeholder.svg?height=100&width=100",
+          })),
+        )
+      })
+  }, [])
+
+  // Logged-in user (hardcoded to Emily Chen for now — replaced with Supabase auth in a later step)
+  useEffect(() => {
+    supabase
+      .from("students")
+      .select("id, name, class, total_credits")
+      .eq("name", "Emily Chen")
+      .single()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Supabase currentUser fetch failed:", error.message, error.details, error.hint)
+          return
+        }
+        if (!data) return
+        setCurrentUser((prev) => ({
+          ...prev,
+          id: data.id,
+          name: data.name,
+          class: data.class,
+          credits: data.total_credits,
+        }))
+
+        supabase
+          .from("meals")
+          .select("weight_g, eco_credits, total_score, created_at")
+          .eq("student_id", data.id)
+          .order("created_at", { ascending: false })
+          .limit(5)
+          .then(({ data: meals, error: mealsError }) => {
+            if (mealsError) {
+              console.error(
+                "Supabase mealHistory fetch failed:",
+                mealsError.message,
+                mealsError.details,
+                mealsError.hint,
+              )
+              return
+            }
+            if (!meals) return
+            setMealHistory(
+              meals.map((m) => ({
+                date: new Date(m.created_at).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                }),
+                waste: `${((m.weight_g ?? 0) / 1000).toFixed(2)}kg`,
+                credits: m.eco_credits,
+                score: `${m.total_score}/18`,
+              })),
+            )
+          })
+      })
+
+    supabase
+      .from("students")
+      .select("id", { count: "exact", head: true })
+      .then(({ count }) => {
+        if (typeof count === "number") {
+          setCurrentUser((prev) => ({ ...prev, totalStudents: count }))
+        }
+      })
+  }, [])
+
+  // (meal history is fetched inside the currentUser effect above so it can use the resolved student id)
 
   // Webcam states
   const [faceCamActive, setFaceCamActive] = useState(false)
