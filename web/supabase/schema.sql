@@ -24,6 +24,15 @@ create table if not exists students (
 -- Backfill column on already-created tables (safe no-op if it exists)
 alter table students add column if not exists photo_url text;
 
+-- Auth-related columns:
+--   user_id  → Supabase auth.users(id), set when a student signs up. Null for
+--              imported/seed students until their account is linked.
+--   username → display name used for login (alternative to email).
+alter table students add column if not exists user_id uuid references auth.users(id) on delete set null;
+alter table students add column if not exists username text;
+create unique index if not exists idx_students_username on students(lower(username)) where username is not null;
+create unique index if not exists idx_students_user_id  on students(user_id)         where user_id  is not null;
+
 -- 2. MEALS — one row per tray scan
 create table if not exists meals (
   id                  uuid primary key default gen_random_uuid(),
@@ -74,11 +83,18 @@ drop policy if exists "public read students"    on students;
 drop policy if exists "public read meals"       on meals;
 drop policy if exists "public read rewards"     on rewards;
 drop policy if exists "public read redemptions" on redemptions;
+drop policy if exists "students update own row" on students;
 
 create policy "public read students"    on students    for select using (true);
 create policy "public read meals"       on meals       for select using (true);
 create policy "public read rewards"     on rewards     for select using (true);
 create policy "public read redemptions" on redemptions for select using (true);
+
+-- A logged-in student can update only their own row (matched by user_id).
+create policy "students update own row" on students
+  for update
+  using  (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 -- Table-level grants — required in addition to RLS when using the new
 -- publishable API keys. RLS says "who can read which rows"; GRANT says
@@ -87,6 +103,10 @@ grant select on students    to anon, authenticated;
 grant select on meals       to anon, authenticated;
 grant select on rewards     to anon, authenticated;
 grant select on redemptions to anon, authenticated;
+
+-- Logged-in students need to update their own row (e.g. saving photo_url
+-- after face registration). RLS still gates which rows they can touch.
+grant update on students to authenticated;
 
 -- service_role is what the Pi station script uses (full read/write).
 -- Without these grants, even the service key gets "permission denied".

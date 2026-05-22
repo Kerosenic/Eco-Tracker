@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
+import { FaceRegistrationModal } from "@/components/face-registration-modal"
 import {
   LayoutDashboard,
   MonitorPlay,
@@ -183,6 +184,7 @@ export default function EcoTrackerDashboard() {
   const [rewards, setRewards] = useState(rewardsSeed)
   const [currentUser, setCurrentUser] = useState(currentUserSeed)
   const [mealHistory, setMealHistory] = useState(mealHistorySeed)
+  const [faceModalOpen, setFaceModalOpen] = useState(false)
 
   useEffect(() => {
     supabase
@@ -252,58 +254,69 @@ export default function EcoTrackerDashboard() {
       })
   }, [])
 
-  // Logged-in user (hardcoded to Emily Chen for now — replaced with Supabase auth in a later step)
+  // Logged-in user (resolved from Supabase auth → matched to a students row by user_id)
   useEffect(() => {
-    supabase
-      .from("students")
-      .select("id, name, class, total_credits")
-      .eq("name", "Emily Chen")
-      .single()
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Supabase currentUser fetch failed:", error.message, error.details, error.hint)
-          return
-        }
-        if (!data) return
-        setCurrentUser((prev) => ({
-          ...prev,
-          id: data.id,
-          name: data.name,
-          class: data.class,
-          credits: data.total_credits,
-        }))
+    let cancelled = false
 
-        supabase
-          .from("meals")
-          .select("weight_g, eco_credits, total_score, created_at")
-          .eq("student_id", data.id)
-          .order("created_at", { ascending: false })
-          .limit(5)
-          .then(({ data: meals, error: mealsError }) => {
-            if (mealsError) {
-              console.error(
-                "Supabase mealHistory fetch failed:",
-                mealsError.message,
-                mealsError.details,
-                mealsError.hint,
-              )
-              return
-            }
-            if (!meals) return
-            setMealHistory(
-              meals.map((m) => ({
-                date: new Date(m.created_at).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                }),
-                waste: `${((m.weight_g ?? 0) / 1000).toFixed(2)}kg`,
-                credits: m.eco_credits,
-                score: `${m.total_score}/18`,
-              })),
-            )
-          })
-      })
+    async function load() {
+      const { data: authData } = await supabase.auth.getUser()
+      const userId = authData.user?.id
+      if (!userId) return
+
+      const { data: studentData, error } = await supabase
+        .from("students")
+        .select("id, name, class, total_credits")
+        .eq("user_id", userId)
+        .single()
+
+      if (cancelled) return
+      if (error) {
+        console.error("Supabase currentUser fetch failed:", error.message, error.details, error.hint)
+        return
+      }
+      if (!studentData) return
+
+      setCurrentUser((prev) => ({
+        ...prev,
+        id: studentData.id,
+        name: studentData.name,
+        class: studentData.class,
+        credits: studentData.total_credits,
+      }))
+
+      const { data: meals, error: mealsError } = await supabase
+        .from("meals")
+        .select("weight_g, eco_credits, total_score, created_at")
+        .eq("student_id", studentData.id)
+        .order("created_at", { ascending: false })
+        .limit(5)
+
+      if (cancelled) return
+      if (mealsError) {
+        console.error(
+          "Supabase mealHistory fetch failed:",
+          mealsError.message,
+          mealsError.details,
+          mealsError.hint,
+        )
+        return
+      }
+      if (!meals) return
+      setMealHistory(
+        meals.map((m) => ({
+          date: new Date(m.created_at).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }),
+          waste: `${((m.weight_g ?? 0) / 1000).toFixed(2)}kg`,
+          credits: m.eco_credits,
+          score: `${m.total_score}/18`,
+        })),
+      )
+    }
+
+    load()
 
     supabase
       .from("students")
@@ -313,6 +326,10 @@ export default function EcoTrackerDashboard() {
           setCurrentUser((prev) => ({ ...prev, totalStudents: count }))
         }
       })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // (meal history is fetched inside the currentUser effect above so it can use the resolved student id)
@@ -461,6 +478,16 @@ export default function EcoTrackerDashboard() {
                 <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
                 <AvatarFallback className="bg-background text-foreground">EC</AvatarFallback>
               </Avatar>
+              <button
+                type="button"
+                onClick={async () => {
+                  await supabase.auth.signOut()
+                  window.location.href = "/login"
+                }}
+                className="rounded-full bg-background/10 px-3 py-1 text-xs font-medium text-background hover:bg-background/20"
+              >
+                Sign out
+              </button>
             </div>
           </div>
         </div>
@@ -1256,7 +1283,7 @@ export default function EcoTrackerDashboard() {
                     </div>
 
                     {/* Register Button */}
-                    <Button variant="outline" className="w-full">
+                    <Button variant="outline" className="w-full" onClick={() => setFaceModalOpen(true)}>
                       <ScanFace className="mr-2 h-4 w-4" />
                       Register New Face Scan (One-time registration)
                     </Button>
@@ -1345,6 +1372,14 @@ export default function EcoTrackerDashboard() {
           )}
         </main>
       </div>
+
+      <FaceRegistrationModal
+        studentId={(currentUser as { id?: string }).id ?? ""}
+        studentName={currentUser.name}
+        open={faceModalOpen && Boolean((currentUser as { id?: string }).id)}
+        onClose={() => setFaceModalOpen(false)}
+        onRegistered={() => {}}
+      />
     </div>
   )
 }
