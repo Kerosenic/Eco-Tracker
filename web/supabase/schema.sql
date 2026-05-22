@@ -16,9 +16,13 @@ create table if not exists students (
   name            text not null,
   class           text not null,
   face_embedding  jsonb,
+  photo_url       text,
   total_credits   integer not null default 0,
   created_at      timestamptz not null default now()
 );
+
+-- Backfill column on already-created tables (safe no-op if it exists)
+alter table students add column if not exists photo_url text;
 
 -- 2. MEALS — one row per tray scan
 create table if not exists meals (
