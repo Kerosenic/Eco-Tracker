@@ -71,16 +71,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status })
   }
 
-  const { error: insertErr } = await admin.from("students").insert({
-    name,
-    class: studentClass,
-    username,
-    user_id: created.user.id,
-  })
-  if (insertErr) {
+  const { data: inserted, error: insertErr } = await admin
+    .from("students")
+    .insert({
+      name,
+      class: studentClass,
+      username,
+      user_id: created.user.id,
+    })
+    .select("id")
+    .single()
+  if (insertErr || !inserted) {
     await admin.auth.admin.deleteUser(created.user.id)
-    return NextResponse.json({ error: insertErr.message }, { status: 500 })
+    return NextResponse.json({ error: insertErr?.message ?? "could not create student row" }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, studentId: inserted.id })
 }
