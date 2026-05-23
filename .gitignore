@@ -3,6 +3,7 @@ node_modules/
 .next/
 out/
 *.log
+tsconfig.tsbuildinfo
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*

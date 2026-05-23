@@ -1,7 +1,7 @@
 """Run one tray scan and write the result to Supabase + R2.
 
 Laptop dev mode (no cameras, no scale):
-  - Student: picked at random (or by --student flag)
+  - Student: picked at random, by --student name, or by --face-photo match
   - Weight:  random 0-350g
   - Photo:   station/sample-tray.jpg (or --photo path)
 
@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from db import supabase_client, r2_client, R2_BUCKET
+from identify import compute_embedding, find_match
 from score import score_tray, max_possible_score
 
 
@@ -32,7 +33,10 @@ def upload_photo(photo_path: Path) -> str:
     return key
 
 
-def pick_student(supabase, name: str | None):
+def pick_student(supabase, name: str | None, face_photo: str | None):
+    if face_photo:
+        return identify_student(supabase, face_photo)
+
     query = supabase.table("students").select("id, name, total_credits")
     if name:
         query = query.eq("name", name)
@@ -42,14 +46,41 @@ def pick_student(supabase, name: str | None):
     return random.choice(res.data) if not name else res.data[0]
 
 
+def identify_student(supabase, face_photo: str) -> dict:
+    photo_path = Path(face_photo)
+    if not photo_path.exists():
+        sys.exit(f"Face photo not found: {photo_path}")
+
+    embedding = compute_embedding(photo_path)
+    if embedding is None:
+        sys.exit("No face detected in --face-photo. Try a clearer image.")
+
+    rows = supabase.table("students").select(
+        "id, name, total_credits, face_embedding"
+    ).execute().data or []
+
+    match = find_match(embedding, rows)
+    if not match:
+        sys.exit(
+            "No matching student under threshold. Have they registered their face yet?\n"
+            "Run register_faces.py to backfill embeddings from saved photos."
+        )
+
+    distance = match.pop("_match_distance", None)
+    match.pop("face_embedding", None)
+    distance_str = f" (distance={distance:.3f})" if distance is not None else ""
+    print(f"Identified: {match['name']}{distance_str}")
+    return match
+
+
 def fake_weight_g() -> float:
     return round(random.uniform(0, 350), 1)
 
 
-def main(photo_arg: str | None, student_arg: str | None) -> None:
+def main(photo_arg: str | None, student_arg: str | None, face_photo_arg: str | None) -> None:
     supabase = supabase_client()
 
-    student = pick_student(supabase, student_arg)
+    student = pick_student(supabase, student_arg, face_photo_arg)
     print(f"Student: {student['name']} ({student['id']})")
 
     weight_g = fake_weight_g()
@@ -87,5 +118,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--photo", help="Path to a tray photo. Defaults to station/sample-tray.jpg")
     parser.add_argument("--student", help="Student name. Defaults to random.")
+    parser.add_argument(
+        "--face-photo",
+        help="Identify the student by face match against this photo (overrides --student).",
+    )
     args = parser.parse_args()
-    main(args.photo, args.student)
+    main(args.photo, args.student, args.face_photo)
