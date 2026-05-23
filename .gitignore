@@ -36,3 +36,16 @@ station/sample-tray.jpg
 *.onnx
 *.h5
 runs/
+# ...except the trained weights we ship with the station code
+!station/best.pt
+
+# ML training data (huge — keep raw zips and unpacked datasets out of git)
+ml/dataset/
+ml/*.zip
+ml/runs/
+ml/.venv/
+
+# Caveman / agent skill installer artifacts (per-machine, not project code)
+.agents/
+.claude/
+skills-lock.json

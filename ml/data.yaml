@@ -1,0 +1,18 @@
+# Ultralytics YOLO dataset config.
+# Paths are relative to this file's location (ml/).
+path: dataset
+train: images/train
+val: images/val
+
+# Class IDs map: compartment type + waste level.
+# 0..3 = Compartment + waste 0..3
+# 4..7 = Big Compartment + waste 0..3
+names:
+  0: compartment_no_waste
+  1: compartment_bit_waste
+  2: compartment_some_waste
+  3: compartment_full_waste
+  4: big_compartment_no_waste
+  5: big_compartment_bit_waste
+  6: big_compartment_some_waste
+  7: big_compartment_full_waste
