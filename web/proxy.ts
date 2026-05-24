@@ -8,7 +8,7 @@ import { createServerClient } from "@supabase/ssr"
 const PUBLIC_PATHS = ["/login", "/signup"]
 const PUBLIC_PREFIXES = ["/api/auth/", "/_next/", "/favicon", "/icon", "/apple-icon", "/placeholder"]
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (PUBLIC_PATHS.includes(pathname) || PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {

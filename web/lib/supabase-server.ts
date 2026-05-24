@@ -1,4 +1,4 @@
-// Server-side Supabase client (for API routes, middleware, server components).
+// Server-side Supabase client (for API routes, proxy.ts, server components).
 // Reads/writes the session cookie so it stays in sync with the browser client.
 
 import { createServerClient } from "@supabase/ssr"
@@ -20,7 +20,7 @@ export async function supabaseServer() {
             cookieStore.set(name, value, options)
           }
         } catch {
-          // Called from a Server Component — middleware refreshes the session,
+          // Called from a Server Component — proxy.ts refreshes the session,
           // so swallowing here is safe.
         }
       },

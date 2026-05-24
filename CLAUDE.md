@@ -36,7 +36,7 @@ There is no test suite yet. Don't fabricate one — call out the gap if a change
 
 ## How the pieces connect
 
-1. Browser hits the Next.js app. `web/middleware.ts` redirects to `/login` unless the request is on a public path (`/login`, `/signup`, `/api/auth/*`, static assets) or carries a valid Supabase session cookie. This is the single place auth is enforced for the dashboard.
+1. Browser hits the Next.js app. `web/proxy.ts` redirects to `/login` unless the request is on a public path (`/login`, `/signup`, `/api/auth/*`, static assets) or carries a valid Supabase session cookie. This is the single place auth is enforced for the dashboard. (Next.js 16 renamed the `middleware` file convention to `proxy`; the file still runs at the edge before any route is matched.)
 2. Auth uses `@supabase/ssr` so the session lives in cookies that both server and browser can read. Use `web/lib/supabase.ts` (browser, client components only — has `"use client"`) or `web/lib/supabase-server.ts` (server components, route handlers, middleware). Don't mix them up.
 3. Username login works by hitting `/api/auth/username-to-email` first, which looks up the email tied to the username, then signing in normally. Signup goes through `/api/auth/signup` which creates the auth user and the `students` row in one shot (so RLS doesn't block the insert).
 4. R2 uploads always go through `/api/upload` (POST multipart, `file` + `kind=tray|student`). The R2 SDK is server-only — never import `web/lib/r2.ts` from a client component, the credential check at module top will throw. Files land under `Tray-Photos/` or `Face-Photos/` prefixes.
